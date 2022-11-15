@@ -1,0 +1,291 @@
+---
+title: Anàlisi de dades en comunitats energètiques
+subtitle: IMO Salvador Seguí - Gestió de comunitats energètiques - 2022
+output:
+  html_document:
+    df_print: paged
+---
+
+***
+
+Aquesta és la llibreta on s'integraran tots els apartats que anem treballant durant el curs. Començarem amb una caracterització de la demanda històrica d'un conjunt d'usuaris fictícis d'una comunitat energètica i durant les properes setmanes anirem ampliant les funcionalitats de la llibreta per tal de cobrir tot el que us anem explicant durant el curs. 
+
+**ATENCIÓ!** Tingueu en compte que podreu regenerar els resultats amb els fitxers de dades que vulgueu o necessiteu. Per tant, aquesta eina us podrà ser d'utilitat un cop comenceu a treballar. 
+
+```{r, echo=T, results=F, message=F, warning=F}
+library(ggplot2)
+library(data.table)
+library(lubridate)
+library(plotly)
+library(dygraphs)
+library(tidyr)
+library(htmltools)
+library(xts)
+library(viridis)
+library(ggExtra)
+source("funcions.R")
+```
+***
+
+# 1. Demanda energètica d'una comunitat
+
+Durant aquesta part del curs obtenim les dades de consum d'un seguit d'usuaris a través de la plataforma [Datadis](https:://www.datadis.es). Recordeu que us hem explicat com aconseguir credencials i descarregar informació d'aquesta plataforma en el seguent [enllaç al Notion](https://sumptuous-puppy-b86.notion.site/Obtenir-credencials-i-dades-de-Datadis-1c87516c11f740df8b775aaba88db56e).
+
+La metodología que utilitzarem per a que la llibreta interpreti correctament l'històric de demanda energètica dels usuaris de la comunitat és la seguent:
+
+1. A través del vostre navegador web preferit, descarregar tots aquells punts de consum (CUPS) que formin part de la comunitat energètica a través de la plataforma Datadis. Descarregarem tant històric de consum com hi hagi disponible. És important que com a mínim tinguem un any complet per cada usuari.
+2. Guardar cada fitxer amb el nom del NIF relacionat, seguit d'un guió baix i un número consecutiu per tal de tenir un nom únic per cada fitxer. Per exemple, en el cas d'un usuari amb NIF 43311022D generariem els seguents fitxers 43311022D_1.csv, 43311022D_2.csv, 43311022D_3.csv ...
+3. Moure tots els fitxers descarregats i renombrats a dins de la carpeta Dades/Datadis que podem trobar en el directori de la llibreta.
+
+
+```{r, echo=F, results=F}
+wd <- normalizePath(".")
+dir.create(paste0(wd,"/../Dades"), showWarnings = F)
+dir.create(paste0(wd,"/../Dades/Datadis"),showWarnings = F)
+
+datadis_files <- list.files(paste0(wd,"/../Dades/Datadis"),full.names = T)
+exists_demand_data <- length(datadis_files) > 0
+
+if(!exists_demand_data) {
+  message("Actualment no existeixen fitxers de demanda energètica. 
+          Si us plau, afegiu-n'hi i executeu la llibreta de nou.")
+} else {
+  message(sprintf("S'han trobat %s fitxers amb dades provinents de Datadis.",
+                  length(datadis_files)))
+}
+```
+
+```{r, echo=T, results=F, message=F, warning=F}
+if(exists_demand_data) {
+  
+  # Llegim tots els fitxers de dades de Datadis
+  df <- read_datadis_files(datadis_files)
+  df <- df %>% 
+    filter(is.finite(time) &
+           !duplicated(df[,c("time","NIF","CUPS")]))
+}
+```
+
+<center>
+```{r, echo=F, results=T, message=F, warning=F, out.width="100%"}
+if(exists_demand_data) {
+  # Visualitzem les corbes de càrrega individualment per NIF, utilitzant un gràfic interactiu
+  # ggplotly(
+  #   ggplot(df) + 
+  #     geom_line(aes(time,consumption,group=CUPS,col=NIF),alpha=0.6) +
+  #     xlab("temps") + ylab("consum (kWh)") + 
+  #     ggtitle("Corbes de càrrega individuals per NIF") + theme_bw()
+  # )
+  pts <- lapply(unique(df$CUPS),function(i){
+    aux <- df %>% filter(CUPS==i)
+    p <- dygraph(xts(x = data.frame(valor=aux$consumption), 
+                order.by = aux$time), 
+            main=sprintf("NIF: %s, CUPS: %s",df$NIF[df$CUPS==i][1],i),
+            width = 800, height=350) %>%
+      dyOptions(connectSeparatedPoints = T, fillGraph=T, fillAlpha=0.4, 
+                drawGrid = F, colors="#D8AE5A")  %>%
+      dyRangeSelector(height = 30) %>%
+      dyAxis("x", label = "temps") %>%
+      dyAxis("y", label = "consum (kWh)") %>%
+    dyHighlight(highlightCircleSize = 2.5,
+                highlightSeriesBackgroundAlpha = 0.8,
+                hideOnMouseOut = T) %>%
+    dyRoller(rollPeriod = 1) %>% 
+    dyCrosshair(direction = "vertical")
+     htmltools::tags$div(p, style = "padding:10px; border: solid")
+  })
+  htmltools::tagList(pts)
+}
+```
+</center>
+
+```{r, echo=T, results=F, warning=F, message=F}
+if(exists_demand_data) {
+  df_NIF <- df %>% 
+    group_by(time,CUPS) %>%
+    summarise(
+      consumption=sum(consumption),
+      NIF=first(NIF)
+    ) %>%
+    ungroup() %>%
+    select(-CUPS)
+}
+```
+
+
+***
+
+### 1.1 Agregació de demanda hora a hora
+
+
+El potencial autoconsum col·lectiu que es pot fer en una comunitat energètica radica principalment en la complementarietat de les corbes de càrrega individuals. I en la possibilitat, en la mesura del possible, de moure consums en els moments en que l'energia produïda és superior a la demandada, ja que sinó es generen excedents.
+
+Primerament, si tenim en compte l´últim any de dades disponibles per cadascún dels CUPS que integren la comunitat energètica, tenim la seguent corba de càrrega agregada:
+
+```{r, echo=T, results=F, warning=F, message=F}
+if(exists_demand_data) {
+  df_ly <- df_NIF %>%
+    group_by(ytime= format(time,"%m-%d %H:%M"), NIF) %>%
+    summarise(
+      consumption=mean(consumption,na.rm=T)
+    ) %>%
+    mutate(
+      ytime = as.POSIXct(paste0("2021-",ytime),format = "%Y-%m-%d %H:%M", 
+                         tz="Europe/Madrid")
+    ) %>%
+    filter( is.finite(ytime) ) %>%
+    ungroup()
+}
+```
+
+<center> 
+```{r, echo=F, results=T, warning=F, message=F}
+if(exists_demand_data) {
+  # Visualitzem les corbes de càrrega agregades d'un any tipus per NIF, utilitzant un gràfic interactiu
+  # ggplotly(
+  #   ggplot(df_ly) + 
+  #     geom_area(aes(ytime,consumption,fill=NIF,group=CUPS),position="stack") +
+  #     xlab("temps") + ylab("consum (kWh)") + 
+  #     ggtitle("Corbes de càrrega agregades durant un any") + theme_bw()
+  # )
+  df_ly_cast <- pivot_wider(
+    data = df_ly, 
+    names_from = "NIF", 
+    values_from = "consumption")
+  p <- dygraph(
+      xts(df_ly_cast %>% select(-ytime), order.by = df_ly_cast$ytime),
+      main = "Corbes de càrrega agregades per NIF durant un any natural",
+      width = 900,
+      height = 500
+    ) %>%
+    dyOptions(stackedGraph = TRUE, connectSeparatedPoints = T,
+              fillGraph=T, drawGrid = F)  %>%
+    dyLegend(show = "always") %>%
+    dyRangeSelector(height = 30) %>%
+    dyAxis("x", label = "temps") %>%
+    dyAxis("y", label = "consum (kWh)") %>%
+    dyHighlight(highlightCircleSize = 2.5,
+                highlightSeriesBackgroundAlpha = 0.4,
+                hideOnMouseOut = T) %>%
+    dyRoller(rollPeriod = 1) %>% 
+    dyCrosshair(direction = "vertical")
+  htmltools::tagList(
+    list(htmltools::tags$div(p, style = "padding:10px; border: solid"))
+  )
+}
+```
+</center>
+
+***
+
+### 1.2 Agregació de demanda mitja per estació de l'any
+
+Com es pot veure, l'agregació anterior ens permet anar a un detall molt precís sobre quina demanda agregada hi hagués hagut a cada hora i quina repartició entre els diferents usuaris. 
+Tot i això, per entendre una mica més el de esón una mica complicats de dig
+
+
+```{r, echo=T, results=F, warning=F, message=F}
+if(exists_demand_data) {
+  df_ly_season <- df_NIF %>%
+    mutate(
+      yday = as.numeric(format(time,"%j")),
+      season = ifelse(yday<79 | yday>=355, "Hivern",
+                      ifelse(yday>=79 & yday<172, "Primavera",
+                             ifelse(yday>=172 & yday<266,"Estiu",
+                                    "Tardor")))
+    ) %>%
+    group_by(hour = sprintf("%02i:%02i",hour(time),minute(time)), 
+             season, NIF) %>%
+    summarise(
+      date = if(season=="Hivern"){ as.Date("2021-02-01")
+             } else if(season=="Primavera"){ as.Date("2021-05-01")
+             } else if(season=="Estiu"){ as.Date("2021-08-01")
+             } else if(season=="Tardor"){ as.Date("2021-11-01")},
+      consumption=mean(consumption)
+    ) %>%
+    mutate(
+      time = as.POSIXct(paste(date,hour))
+    ) %>% ungroup() %>%
+    select(-hour, -date)
+}
+```
+
+<center> 
+```{r, echo=F, results=T, warning=F, message=F}
+if(exists_demand_data) {
+  df_ly_cast_season <- as.data.frame(
+    pivot_wider(df_ly_season, 
+      names_from = "NIF", 
+      values_from = "consumption"))
+  pts <- lapply(unique(df_ly_cast_season$season), function(ws){
+    aux <- df_ly_cast_season %>% filter(season==ws)
+    p <- dygraph(
+        xts(aux %>% select(-time,-season), order.by = aux$time),
+        main = sprintf("%s - Corbes de càrrega mitjes agregades per NIF",ws),
+        width = 900,
+        height = 500
+      ) %>%
+      dyOptions(stackedGraph = TRUE, connectSeparatedPoints = T,
+                fillGraph=T, drawGrid = F)  %>%
+      dyLegend(show = "always") %>%
+      dyRangeSelector(height = 30) %>%
+      dyAxis("x", label = "temps") %>%
+      dyAxis("y", label = "consum (kWh)") %>%
+      dyHighlight(highlightCircleSize = 2.5,
+                  highlightSeriesBackgroundAlpha = 0.4,
+                  hideOnMouseOut = T) %>%
+      dyRoller(rollPeriod = 1) %>% 
+      dyCrosshair(direction = "vertical")
+      htmltools::tags$div(p, style = "padding:10px; border: solid")
+  })
+  htmltools::tagList(pts)
+}
+```
+</center>
+
+***
+
+### Mapa de calor anual de la demanda agregada
+
+Una manera alternativa i que ens proporciona molta informació en un cop de vista al respecte de la demanda energètica agregada són els mapes de calor.
+
+```{r}
+df_ly_total <- df_ly %>% 
+  group_by(ytime) %>%
+  summarise(
+    consumption = mean(consumption)*sum(is.finite(consumption))
+  ) %>%
+  ungroup() %>% 
+  mutate(year = year(ytime),
+         month = month(ytime, label=TRUE),
+         day = day(ytime),
+         hour = hour(ytime)) %>%
+  select(day,hour,month,year,consumption) %>%
+  fill(consumption)
+```
+
+<center>
+```{r,echo=F,results=T,message=F,warning=F,out.width='100%'}
+p <-ggplot(df_ly_total,aes(day,hour,fill=consumption))+
+  geom_tile(color= "white",size=0.1) + 
+  scale_fill_viridis(name="consum (kWh)",option ="C")
+p <-p + facet_grid(year~month)
+p <-p + scale_y_continuous(trans = "reverse", breaks = unique(df_ly_total$hour))
+p <-p + scale_x_continuous(breaks =c(1,10,20,31))
+p <-p + theme_minimal(base_size = 8)
+p <-p + labs(title= paste("Mapa de calor de la demanda agregada en any tipus"), x="Dia", y="Hora")
+p <-p + theme(legend.position = "bottom")+
+  theme(plot.title=element_text(size = 14))+
+  theme(axis.text.y=element_text(size=6)) +
+  theme(axis.text.x=element_text(size=6,angle=90)) +
+  theme(strip.background = element_rect(colour="white"))+
+  theme(plot.title=element_text(hjust=0))+
+  theme(axis.ticks=element_blank())+
+  theme(axis.text=element_text(size=7))+
+  theme(legend.title=element_text(size=8))+
+  theme(legend.text=element_text(size=6))+
+  removeGrid()#ggExtra
+p
+```
+</center>
+
