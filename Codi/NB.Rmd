@@ -198,14 +198,14 @@ if(exists_demand_data) {
     group_by(hour = sprintf("%02i:%02i",hour(time),minute(time)), 
              season, NIF) %>%
     summarise(
-      date = if(season=="Hivern"){ as.Date("2021-02-01")
-             } else if(season=="Primavera"){ as.Date("2021-05-01")
-             } else if(season=="Estiu"){ as.Date("2021-08-01")
-             } else if(season=="Tardor"){ as.Date("2021-11-01")},
+      date = ifelse(season=="Hivern",as.Date("2021-02-01"),
+              ifelse(season=="Primavera",as.Date("2021-05-01"),
+               ifelse(season=="Estiu",as.Date("2021-08-01"),
+                ifelse(season=="Tardor",as.Date("2021-11-01"))))),
       consumption=mean(consumption)
     ) %>%
     mutate(
-      time = as.POSIXct(paste(date,hour))
+      time = as.POSIXct(paste(as.Date(date,origin=as.Date("1970-01-01")),hour))
     ) %>% ungroup() %>%
     select(-hour, -date)
 }
@@ -217,7 +217,7 @@ if(exists_demand_data) {
   df_ly_cast_season <- as.data.frame(
     pivot_wider(df_ly_season, 
       names_from = "NIF", 
-      values_from = "consumption"))
+      values_from = "consumption",values_fn = mean))
   pts <- lapply(unique(df_ly_cast_season$season), function(ws){
     aux <- df_ly_cast_season %>% filter(season==ws)
     p <- dygraph(
@@ -310,4 +310,3 @@ p
 # )
 # plot(df_pv_scen$b)
 ```
-
