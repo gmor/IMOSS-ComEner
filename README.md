@@ -17,7 +17,7 @@ El primer pas és instal·lar els seguents programes al vostre ordinador (en els
 
 Un cop tingueu instal·lat el programari al vostre sistema, heu d'obrir Rstudio i executar les seguents comandes:
 ```
-install.packages( c("ggplot2", "data.table", "lubridate", "plotly", "dygraphs", "tidyr", "htmltools", "xts", "viridis", "ggExtra") )
+install.packages( c("devtools","ggplot2", "data.table", "lubridate", "plotly", "dygraphs", "tidyr", "htmltools", "xts", "viridis", "ggExtra") )
 devtools::install_github("mcanigueral/dutils")
 ```
 Aquest codi només l'heu d'executar un cop. A partir de que ho tingueu tot instal·lat, ja us funcionarà l'execució de la llibreta d'anàlisi.
