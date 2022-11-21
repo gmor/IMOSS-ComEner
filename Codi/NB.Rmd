@@ -23,6 +23,7 @@ library(htmltools)
 library(xts)
 library(viridis)
 library(ggExtra)
+library(dutils)
 source("funcions.R")
 ```
 ***
@@ -288,4 +289,25 @@ p <-p + theme(legend.position = "bottom")+
 p
 ```
 </center>
+
+## 2. Generació fotovoltàica
+
+```{r}
+# df_pv_scen <- get_pv_timeseries(
+#      year = 2021,
+#      lat = 41.8,
+#      lon = 0.6,
+#      database = "PVGIS-SARAH",
+#      loss = 14,
+#      usehorizon = 1,
+#      userhorizon = '0,0,0,0,0,0,5,10,10,5,0,0,0',
+#      panels_tbl = data.frame(
+#        "varname"=c("a","b"),
+#        tilt=c(10,25),
+#        azimuth=c(0,0),
+#        kWp=c(8,8)
+#      )
+# )
+# plot(df_pv_scen$b)
+```
 
