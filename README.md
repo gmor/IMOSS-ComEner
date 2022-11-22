@@ -24,7 +24,7 @@ Aquest codi només l'heu d'executar un cop. A partir de que ho tingueu tot insta
 
 ## Utilització de la llibreta d'anàlisi
 
-S'ha de descarregar el repositori a través del botó verd "Code..." d'aquesta web (en la part superior dreta) i descarregar el zip. Un cop tingueu en el vostre ordinador el fitxer, descomprimir-lo a la carpeta que desitjeu i executar la llibreta utilitzant els executadors depenent del vostre sistema operatiu. Per exemple, en el cas de Windows 7/10/11, fer doble click a sobre de *executar_windows.cmd*.
+S'ha de descarregar el repositori a través del botó verd "Code" d'aquesta web (en la part superior dreta) i descarregar el zip. Un cop tingueu en el vostre ordinador el fitxer, descomprimir-lo a la carpeta que desitjeu i executar la llibreta utilitzant els executadors depenent del vostre sistema operatiu. Per exemple, en el cas de Windows 7/10/11, fer doble click a sobre de *executar_windows.cmd*.
 
 Aquest executable generarà un fitxer anomenat Veure_Resultats.nb.html que es totalment portable i podeu moure i compartir amb qui vulgueu. Per exemple, el podeu compartir amb un disc portable, correu electrònic o emmagatzematge al núvol. El motiu d'instal·lació de tot el programari i les llibreries és que pogueu analitzar i visualitzar els resultats específics de la comunitat energètica del vostre interés. Els vostres fitxers de dades els heu de col·locar dins de la carpeta Dades d'aquest repositori en local.
 
