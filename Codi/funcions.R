@@ -1,21 +1,25 @@
-read_datadis_files <- function(files){
+read_datadis_files <- function(files, only_real_values=T){
   raw_dfs <- do.call(
     rbind,
     lapply(
       files,
       function(d){
         aux <- fread(d,data.table = F)
-        aux <- aux %>% filter(metodoObtencion=="Real")
-        data.frame(
-          "NIF" = strsplit(tail(strsplit(d,"/")[[1]],1),"_")[[1]][1],
-          "CUPS" = aux$cups,
-          "time" = as.POSIXct( paste(aux$fecha,
-                          sprintf("%02i:%02i",
-                                  as.numeric(substr(aux$hora,1,2))-1,
-                                  as.numeric(substr(aux$hora,4,5)))),
-                          format="%Y/%m/%d %H:%M", tz="Europe/Madrid"),
-          "consumption" = as.numeric(gsub(",","\\.",aux$consumo_kWh))
-        )
+        if(only_real_values){
+          aux <- aux %>% filter(metodoObtencion=="Real")
+        }
+        if(nrow(aux)>0){
+          data.frame(
+            "NIF" = strsplit(tail(strsplit(d,"/")[[1]],1),"_")[[1]][1],
+            "CUPS" = aux$cups,
+            "time" = force_tz(parsedate::parse_date( paste(aux$fecha,
+                            sprintf("%02i:%02i",
+                                    as.numeric(mapply(function(i)i[1],strsplit(aux$hora,":")))-1,
+                                    as.numeric(mapply(function(i)i[2],strsplit(aux$hora,":")))
+                            ))),tzone = "Europe/Madrid"),
+            "consumption" = as.numeric(gsub(",","\\.",aux$consumo_kWh))
+          )
+        }
       }
     )
   )
@@ -24,7 +28,16 @@ read_datadis_files <- function(files){
 
 args_pvgis <- function(arg){
   list(
-      "Latitud"="lat"
+      "Latitud"="lat",
+      "Longitud"="lon",
+      "ConsiderarHoritzoDelTerreny"="usehorizon",
+      "HoritzoDeSombresPersonalitzat"="UserHorizon",
+      "PotenciaFV"="peakpower",
+      "TecnologiaFV"="pvtechchoice",
+      "MuntatgeFV"="mountingplace",
+      "Perdues"="loss",
+      "InclinacioFV"="angle",
+      "AzimutRespecteSud"="aspect"
       # lat	F	Yes	-	Latitude, in decimal degrees, south is negative.
       # lon	F	Yes	-	Longitude, in decimal degrees, west is negative.
       # usehorizon	I	No	1	Calculate taking into account shadows from high horizon. Value of 1 for "yes".

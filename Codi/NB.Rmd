@@ -60,7 +60,7 @@ if(!exists_demand_data) {
 if(exists_demand_data) {
   
   # Llegim tots els fitxers de dades de Datadis
-  df <- read_datadis_files(datadis_files)
+  df <- read_datadis_files(datadis_files,only_real_values = F)
   df <- df %>% 
     filter(is.finite(time) &
            !duplicated(df[,c("time","NIF","CUPS")]))
@@ -193,11 +193,13 @@ if(exists_demand_data) {
       season = ifelse(yday<79 | yday>=355, "Hivern",
                       ifelse(yday>=79 & yday<172, "Primavera",
                              ifelse(yday>=172 & yday<266,"Estiu",
-                                    "Tardor")))
+                                    "Tardor"))),
+      month = month(time)
     ) %>%
     group_by(hour = sprintf("%02i:%02i",hour(time),minute(time)), 
              season, NIF) %>%
     summarise(
+      # date = as.Date(paste0(format(time,"%Y-%m"),"-01")),
       date = ifelse(season=="Hivern",as.Date("2021-02-01"),
               ifelse(season=="Primavera",as.Date("2021-05-01"),
                ifelse(season=="Estiu",as.Date("2021-08-01"),
