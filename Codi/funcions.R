@@ -26,6 +26,35 @@ read_datadis_files <- function(files, only_real_values=T){
   raw_dfs
 }
 
+read_edistribucion_files <- function(files, only_real_values=T){
+  raw_dfs <- do.call(
+    rbind,
+    lapply(
+      files,
+      function(d){
+        aux <- fread(d,data.table = F,dec=",")
+        if(only_real_values){
+          aux <- aux %>% filter(`REAL/ESTIMADO`=="R")
+        }
+        if(nrow(aux)>0){
+          data.frame(
+            "NIF" = strsplit(tail(strsplit(d,"/")[[1]],1),"_")[[1]][1],
+            "CUPS" = aux$CUPS,
+            "time" = force_tz(as.POSIXct(
+              paste(aux$Fecha,
+               sprintf("%02i:00",
+                       aux$Hora-1)),
+              format="%d/%m/%Y %H:%M"),tzone = "Europe/Madrid"),
+            "consumption" = aux$AE_kWh
+          )
+        }
+      }
+    )
+  )
+  raw_dfs
+}
+  
+  
 args_pvgis <- function(arg){
   translations <- list(
       "Latitud"="lat",
@@ -97,18 +126,18 @@ pvgis_get_hourly_data <- function (years=2019:2020, scenario) {
 pvgis_download_scenarios <- function(scenarios){
   
   total_generation <- do.call(rbind,
-                              lapply(scenarios,function(scenario){
-                                pvgis_results <- pvgis_get_hourly_data(2020, scenario)$output
-                                sun_position <- as.data.frame(do.call(cbind,
-                                                                      oce::sunAngle(pvgis_results$time,scenario$Longitud,
-                                                                                    scenario$Latitud,T)))[,c("time","azimuth","altitude")]
-                                sun_position$time <- as.POSIXct(sun_position$time,
-                                                                origin=as.POSIXct("1970-01-01 00:00:00",tz="UTC"),tz = "UTC")
-                                pvgis_results <- pvgis_results %>% left_join(sun_position, by="time")
-                                pvgis_results$NomCampFV <- scenario$NomCampFV
-                                pvgis_results
-                              }
-                              ))
+    lapply(scenarios,function(scenario){
+      pvgis_results <- pvgis_get_hourly_data(2020, scenario)$output
+      sun_position <- as.data.frame(do.call(cbind,
+                                            oce::sunAngle(pvgis_results$time,scenario$Longitud,
+                                                          scenario$Latitud,T)))[,c("time","azimuth","altitude")]
+      sun_position$time <- as.POSIXct(sun_position$time,
+                                      origin=as.POSIXct("1970-01-01 00:00:00",tz="UTC"),tz = "UTC")
+      pvgis_results <- pvgis_results %>% left_join(sun_position, by="time")
+      pvgis_results$NomCampFV <- scenario$NomCampFV
+      pvgis_results
+    }
+    ))
   total_generation$time <- with_tz(total_generation$time,"Europe/Madrid")
   aggregated_generation <- total_generation %>% group_by(time) %>%
     summarise(generation = sum(generation,na.rm=T),
