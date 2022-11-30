@@ -24,6 +24,9 @@ library(xts)
 library(viridis)
 library(ggExtra)
 library(dutils)
+library(jsonlite)
+library(httr)
+library(dplyr)
 source("funcions.R")
 ```
 ***
@@ -43,8 +46,18 @@ La metodología que utilitzarem per a que la llibreta interpreti correctament l'
 wd <- normalizePath(".")
 dir.create(paste0(wd,"/../Dades"), showWarnings = F)
 dir.create(paste0(wd,"/../Dades/Datadis"),showWarnings = F)
+dir.create(paste0(wd,"/../Dades/PVGIS"),showWarnings = F)
+dir.create(paste0(wd,"/../Dades/e-distribución"),showWarnings = F)
 
-datadis_files <- list.files(paste0(wd,"/../Dades/Datadis"),full.names = T)
+datadis_files <- list.files(paste0(wd,"/../Dades/Datadis"),full.names = T,
+                            pattern = ".csv$")
+edistribucion_files <- list.files(paste0(wd,"/../Dades/e-distribución"),
+                                  full.names = T,pattern = ".csv$")
+pvgis_files <- list.files(paste0(wd,"/../Dades/PVGIS"),full.names = T,
+                          pattern = ".json$")
+
+```
+```{r, echo=F, results=F}
 exists_demand_data <- length(datadis_files) > 0
 
 if(!exists_demand_data) {
@@ -131,7 +144,7 @@ if(exists_demand_data) {
       consumption=mean(consumption,na.rm=T)
     ) %>%
     mutate(
-      ytime = as.POSIXct(paste0("2021-",ytime),format = "%Y-%m-%d %H:%M", 
+      ytime = as.POSIXct(paste0("2020-",ytime),format = "%Y-%m-%d %H:%M", 
                          tz="Europe/Madrid")
     ) %>%
     filter( is.finite(ytime) ) %>%
@@ -166,7 +179,7 @@ if(exists_demand_data) {
     dyAxis("x", label = "temps") %>%
     dyAxis("y", label = "consum (kWh)") %>%
     dyHighlight(highlightCircleSize = 2.5,
-                highlightSeriesBackgroundAlpha = 0.4,
+                highlightSeriesBackgroundAlpha = 0.8,
                 hideOnMouseOut = T) %>%
     dyRoller(rollPeriod = 1) %>% 
     dyCrosshair(direction = "vertical")
@@ -235,7 +248,7 @@ if(exists_demand_data) {
       dyAxis("x", label = "temps") %>%
       dyAxis("y", label = "consum (kWh)") %>%
       dyHighlight(highlightCircleSize = 2.5,
-                  highlightSeriesBackgroundAlpha = 0.4,
+                  highlightSeriesBackgroundAlpha = 0.8,
                   hideOnMouseOut = T) %>%
       dyRoller(rollPeriod = 1) %>% 
       dyCrosshair(direction = "vertical")
@@ -263,13 +276,13 @@ df_ly_total <- df_ly %>%
          month = month(ytime, label=TRUE),
          day = day(ytime),
          hour = hour(ytime)) %>%
-  select(day,hour,month,year,consumption) %>%
+  select(ytime,day,hour,month,year,consumption) %>%
   fill(consumption)
 ```
 
 <center>
 ```{r,echo=F,results=T,message=F,warning=F,out.width='100%'}
-p <-ggplot(df_ly_total,aes(day,hour,fill=consumption))+
+p <-ggplot(df_ly_total %>% select(-ytime),aes(day,hour,fill=consumption))+
   geom_tile(color= "white",size=0.1) + 
   scale_fill_viridis(name="consum (kWh)",option ="C")
 p <-p + facet_grid(year~month)
@@ -294,21 +307,97 @@ p
 
 ## 2. Generació fotovoltàica
 
+Segons els escenaris definits en els fitxers JSON (definit, per exemple a: Dades/PVGIS/escenaris.json), s'estima quina és la producció FotoVoltaica (FV) de cadascún dels camps definits. Cadascún d'ells anirà definit per un nom que ha de ser únic. A posteriori, el programa que genera la llibreta ja calcula quina és la generació agregada de tots els camps, és a dir, poden definir-se diferents tipologies de camps FV, amb canvis de posicions i/o característiques en cadascún d'ells.
+
 ```{r}
-# df_pv_scen <- get_pv_timeseries(
-#      year = 2021,
-#      lat = 41.8,
-#      lon = 0.6,
-#      database = "PVGIS-SARAH",
-#      loss = 14,
-#      usehorizon = 1,
-#      userhorizon = '0,0,0,0,0,0,5,10,10,5,0,0,0',
-#      panels_tbl = data.frame(
-#        "varname"=c("a","b"),
-#        tilt=c(10,25),
-#        azimuth=c(0,0),
-#        kWp=c(8,8)
-#      )
-# )
-# plot(df_pv_scen$b)
+if(length(pvgis_files)==0){
+  generation_df <- NULL
+  "No s'ha definit cap camp fotovoltaic! Genereu un fitxer JSON com a l'exemple"
+} else {
+  pvgis_scenarios <- do.call(c,lapply(pvgis_files,
+                                      function(x)fromJSON(x,simplifyDataFrame = F)))
+  generation_df <- pvgis_download_scenarios(pvgis_scenarios)
+}
 ```
+
+Seguidament, visualitzem la producció FV de cadascún dels camps que están definits en el fitxer *Dades/PVGIS/escenaris.json*
+
+<center>
+```{r, echo=F, results=T, message=F, warning=F, out.width="100%"}
+if(!is.null(generation_df)) {
+  pts <- lapply(unique(generation_df$NomCampFV),function(i){
+    aux <- generation_df %>% filter(NomCampFV==i)
+    p <- dygraph(xts(x = data.frame(valor=aux$generation), 
+                order.by = aux$time), 
+            main=sprintf("NomCampFV: %s",i),
+            width = 800, height=350) %>%
+      dyOptions(connectSeparatedPoints = T, fillGraph=T, fillAlpha=0.4, 
+                drawGrid = F, colors="#D8AE5A")  %>%
+      dyRangeSelector(height = 30) %>%
+      dyAxis("x", label = "temps") %>%
+      dyAxis("y", label = "generació (kWh)") %>%
+    dyHighlight(highlightCircleSize = 2.5,
+                highlightSeriesBackgroundAlpha = 0.8,
+                hideOnMouseOut = T) %>%
+    dyRoller(rollPeriod = 1) %>% 
+    dyCrosshair(direction = "vertical")
+     htmltools::tags$div(p, style = "padding:10px; border: solid")
+  })
+  htmltools::tagList(pts)
+}
+```
+</center>
+
+
+# 3. Comprovació del nivell d'autoconsum
+```{r, echo=F, results=F}
+if(!is.null(generation_df)){
+  df_ly_total_with_gen <- df_ly_total %>% 
+    left_join(generation_df %>% filter(NomCampFV=="TotalFV") %>% select(-NomCampFV),by = c("ytime"="time"))
+  df_ly_total_with_gen$surplus <-
+    ifelse(df_ly_total_with_gen$generation>df_ly_total_with_gen$consumption,
+           df_ly_total_with_gen$generation - df_ly_total_with_gen$consumption,0)
+  df_ly_total_with_gen$selfcons <-  
+    ifelse(df_ly_total_with_gen$generation<=df_ly_total_with_gen$consumption, 
+           df_ly_total_with_gen$generation, df_ly_total_with_gen$consumption)
+  df_ly_total_with_gen$selfconsperc <-
+    (df_ly_total_with_gen$selfcons/df_ly_total_with_gen$consumption) * 100
+  df_ly_total_with_gen$fromgrid <- 
+    - df_ly_total_with_gen$consumption + df_ly_total_with_gen$selfcons
+}
+```
+
+```{r}
+if(!is.null(generation_df)){
+  p <- dygraph(
+        xts(df_ly_total_with_gen %>% select(surplus, selfcons, fromgrid) %>%
+              rename("Excedents"="surplus","Autoconsum"="selfcons",
+                     "XarxaElèctrica"="fromgrid"), 
+            order.by = df_ly_total_with_gen$ytime),
+        main = paste0("Excedents, autoconsum solar (",
+          round(sum(df_ly_total_with_gen$selfcons,na.rm=T)/
+                  sum(df_ly_total_with_gen$generation,na.rm=T),3)*100,
+          "%) i consum de xarxa respecte total (",
+          round(-sum(df_ly_total_with_gen$fromgrid,na.rm=T)/
+                  sum(df_ly_total_with_gen$consumption,na.rm=T),3)*100,"%)"),
+        width = 900,
+        height = 500
+      ) %>%
+      dyOptions(stackedGraph = F, connectSeparatedPoints = T,
+                fillGraph=T, drawGrid = F)  %>%
+      dyLegend(show = "always") %>%
+      dyRangeSelector(height = 30) %>%
+      dyAxis("x", label = "temps") %>%
+      dyAxis("y", label = "electricitat (kWh)") %>%
+      dyHighlight(highlightCircleSize = 2.5,
+                  highlightSeriesBackgroundAlpha = 0.9,
+                  hideOnMouseOut = T) %>%
+      dyRoller(rollPeriod = 1) %>% 
+      dyCrosshair(direction = "vertical")
+  htmltools::tagList(
+    list(htmltools::tags$div(p, style = "padding:10px; border: solid"))
+  )
+}
+```
+
+

@@ -1,17 +1,38 @@
 [
   {
-    "NomEdifici": "Edifici A",
-    "Latitud":
-    "Longitud"
+    "NomCampFV": "Edifici plurifamiliar - Coberta sud-oest magatzem",
+    "Latitud": 41.62732,
+    "Longitud": 0.63993,
+    "Ombres":"10,5,2,2,1,0,0,0,12,20,5,0,0,0,4,7,3,0",
+    "PotenciaFV": 12,
+    "TecnologiaFV": "crystSi",
+    "MuntatgeFV": "building",
+    "Perdues": 14,
+    "InclinacioFV": 20,
+    "AzimutRespecteSud": 15
   },
   {
-    "NomEdifici": "Edifici B",
-    "Latitud":
-    "Longitud":
-    "Escenaris": [
-      {
-        s
-      }
-    ] 
+    "NomCampFV": "Edifici plurifamiliar - Coberta plana",
+    "Latitud": 41.62737,
+    "Longitud": 0.64134,
+    "Ombres":"0,0,0,0,10,20,20,0,0,0,0,0,0,0,0,0,0,0",
+    "PotenciaFV": 15,
+    "TecnologiaFV": "crystSi",
+    "MuntatgeFV": "free",
+    "Perdues": 14,
+    "InclinacioFV": 32,
+    "AzimutRespecteSud": -20
+  },
+  {
+    "NomCampFV": "Casa aïllada  - Coberta plana",
+    "Latitud": 41.63737,
+    "Longitud": 0.62134,
+    "Ombres":"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+    "PotenciaFV": 5,
+    "TecnologiaFV": "crystSi",
+    "MuntatgeFV": "building",
+    "Perdues": 14,
+    "InclinacioFV": 14,
+    "AzimutRespecteSud": 0
   }
 ]

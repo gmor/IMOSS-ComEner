@@ -27,11 +27,11 @@ read_datadis_files <- function(files, only_real_values=T){
 }
 
 args_pvgis <- function(arg){
-  list(
+  translations <- list(
       "Latitud"="lat",
       "Longitud"="lon",
-      "ConsiderarHoritzoDelTerreny"="usehorizon",
-      "HoritzoDeSombresPersonalitzat"="UserHorizon",
+      "ElevacioTerreny"="usehorizon",
+      "Ombres"="UserHorizon",
       "PotenciaFV"="peakpower",
       "TecnologiaFV"="pvtechchoice",
       "MuntatgeFV"="mountingplace",
@@ -64,5 +64,58 @@ args_pvgis <- function(arg){
       # systemcost	F	if pvprice	-	Total cost of installing the PV system [your currency].
       # interest	F	if pvprice	-	Interest in %/year
       # lifetime	I	No	25	Expected lifetime of the PV system in years.
-  )[[arg]]
+  )
+  if(arg %in% names(translations)){
+    return(translations[[arg]])
+  } else {
+    return(arg)
   }
+}
+
+pvgis_get_hourly_data <- function (years=2019:2020, scenario) {
+  nameField <- scenario[["NomCampFV"]]
+  scenario <- scenario[!(names(scenario) %in% "NomCampFV")]
+  url <- paste0(
+    "https://re.jrc.ec.europa.eu/api/v5_2/seriescalc?",
+    "outputformat=json&raddatabase=PVGIS-SARAH2&usehorizon=1&",
+    "startyear=",min(years),"&endyear=",max(years),"&pvcalculation=1&",
+    paste(mapply(function(i){
+      paste0(args_pvgis(names(scenario)[i]),"=",scenario[[i]])},1:length(scenario)),
+      collapse="&"))
+  response <- httr::GET(url)
+  content <- httr::content(response)
+  timeseries <- as.data.frame(
+    do.call(rbind,lapply(content$outputs$hourly,function(i){unlist(i)})))
+  timeseries <- data.frame(
+    "time" = as.POSIXct(
+      timeseries$time, format = "%Y%m%d:%H%M", tz="UTC") - minutes(70),
+    "generation" = as.numeric(timeseries$P)/1000)
+  
+  return(list("name"=nameField,"inputs"=content$inputs,"output"=timeseries))
+}
+
+pvgis_download_scenarios <- function(scenarios){
+  
+  total_generation <- do.call(rbind,
+                              lapply(scenarios,function(scenario){
+                                pvgis_results <- pvgis_get_hourly_data(2020, scenario)$output
+                                sun_position <- as.data.frame(do.call(cbind,
+                                                                      oce::sunAngle(pvgis_results$time,scenario$Longitud,
+                                                                                    scenario$Latitud,T)))[,c("time","azimuth","altitude")]
+                                sun_position$time <- as.POSIXct(sun_position$time,
+                                                                origin=as.POSIXct("1970-01-01 00:00:00",tz="UTC"),tz = "UTC")
+                                pvgis_results <- pvgis_results %>% left_join(sun_position, by="time")
+                                pvgis_results$NomCampFV <- scenario$NomCampFV
+                                pvgis_results
+                              }
+                              ))
+  total_generation$time <- with_tz(total_generation$time,"Europe/Madrid")
+  aggregated_generation <- total_generation %>% group_by(time) %>%
+    summarise(generation = sum(generation,na.rm=T),
+              azimuth = mean(azimuth,na.rm=T),
+              altitude = mean(altitude,na.rm=T)) %>%
+    ungroup() %>% mutate(NomCampFV="TotalFV")
+  total_generation <- rbind(total_generation, aggregated_generation)
+  
+  return(total_generation)
+}
