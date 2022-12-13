@@ -23,7 +23,6 @@ library(htmltools)
 library(xts)
 library(viridis)
 library(ggExtra)
-library(dutils)
 library(jsonlite)
 library(httr)
 library(dplyr)
@@ -179,7 +178,7 @@ if(exists_demand_data) {
   df_ly_cast <- pivot_wider(
     data = df_ly, 
     names_from = "NIF", 
-    values_from = "consumption")
+    values_from = "consumption",values_fn = mean)
   p <- dygraph(
       xts(df_ly_cast %>% select(-ytime), order.by = df_ly_cast$ytime),
       main = "Corbes de càrrega agregades per NIF durant un any natural",
@@ -361,6 +360,34 @@ if(!is.null(generation_df)) {
 }
 ```
 </center>
+
+```{r}
+ggplot(generation_df %>% filter(NomCampFV=="TotalFV" & altitude>0) %>% 
+         group_by(azimuth=round(azimuth,0),altitude=round(altitude,0),NomCampFV) %>%
+         summarise(
+           generation = mean(generation,na.rm=T)
+         ) %>% ungroup(), aes(azimuth, altitude, col=generation)) +
+  geom_line() +
+  scale_fill_distiller(palette = "Spectral", direction = -1) +
+  ylim(c(90,0)) + xlim(c(0,360)) +
+  coord_polar()
+
+p <-p + scale_y_continuous(trans = "reverse", breaks = unique(df_ly_total$hour))
+p <-p + scale_x_continuous(breaks =c(1,10,20,31))
+p <-p + theme_minimal(base_size = 8)
+p <-p + labs(title= paste("Mapa de calor de la demanda agregada en any tipus"), x="Dia", y="Hora")
+p <-p + theme(legend.position = "bottom")+
+  theme(plot.title=element_text(size = 14))+
+  theme(axis.text.y=element_text(size=6)) +
+  theme(axis.text.x=element_text(size=6,angle=90)) +
+  theme(strip.background = element_rect(colour="white"))+
+  theme(plot.title=element_text(hjust=0))+
+  theme(axis.ticks=element_blank())+
+  theme(axis.text=element_text(size=7))+
+  theme(legend.title=element_text(size=8))+
+  theme(legend.text=element_text(size=6))+
+  removeGrid()
+```
 
 
 # 3. Comprovació del nivell d'autoconsum
