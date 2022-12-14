@@ -412,6 +412,10 @@ if(!is.null(generation_df)) {
 ```
 </center>
 
+
+### Generació FV en coordenades polars
+
+
 Els anteriors resultats en forma de sèries temporals també els podem visualitzar com gràfics en coordenades polars, de forma similar com hem fet amb la demanda energètica en hores d'insolació. Aquests gràfics ens ajuden a comprendre i quantificar en un únic cop de vista els moments del dia en que tenim més producció fotovoltaica. 
 
 ```{r,echo=F,results=T, warning=F, message=F,out.width='100%'}
@@ -512,12 +516,25 @@ if(!is.null(generation_df)){
 }
 ```
 
-### Generació dels coeficients de repartiment
+### Generació dels coeficients de repartiment i resultats individual
 
-```{r}
+Si apliquem un repartiment de coeficients en base al consum anual que té cada usuari, els repartiments fixos serien:
+
+```{r,echo=F}
 coefs_nif <- df_ly %>% group_by(NIF) %>% summarise(coef=mean(consumption))
-coefs_nif$coef <- coefs_nif$coef/sum(coefs_nif$coef)
+coefs_nif$coef <- round(coefs_nif$coef/sum(coefs_nif$coef), 2)
+coefs_nif
+```
 
+Aquest seria el fitxer en format *txt* a enviar a la distribuïdora.
+
+```{r,echo=F}
+write.table(coefs_nif,file = stdout(),quote=F,col.names = F,row.names = F,sep=";",dec=",")
+```
+
+Seguidament sobre l'any d'exemple que hem estat treballant, podeu veure quins són els resultats percentuals d'autoconsum, excedents i importació d'energia de xarxa respecte el consum individual i l'energia generada que pertoca a cada usuari segons els coeficients.
+
+```{r,echo=F}
 df_ly_with_gen <- df_ly %>% 
     left_join(generation_df %>% filter(NomCampFV=="TotalFV") %>% select(-NomCampFV),by = c("ytime"="time")) %>%
     left_join(coefs_nif,by="NIF")
@@ -533,15 +550,12 @@ df_ly_with_gen$selfconsperc <-
   (df_ly_with_gen$selfcons/df_ly_with_gen$consumption) * 100
 df_ly_with_gen$fromgrid <- 
   - df_ly_with_gen$consumption + df_ly_with_gen$selfcons
-round(sum(df_ly_with_gen$selfcons,na.rm=T)/
-                  sum(df_ly_with_gen$generation,na.rm=T),3)*100
 
 df_ly_with_gen %>% group_by(NIF) %>%
-  summarise(autoconsum=round((sum(selfcons,na.rm=T)/sum(generation,na.rm=T))*100,2),
-            excedent=round(((sum(generation,na.rm=T)-sum(selfcons,na.rm=T))/sum(generation,na.rm=T))*100,2),
-            xarxa=round((-sum(fromgrid,na.rm=T)/
+  summarise("Autoconsum (%)"=round((sum(selfcons,na.rm=T)/sum(generation,na.rm=T))*100,2),
+            "Excedent (%)"=round(((sum(generation,na.rm=T)-sum(selfcons,na.rm=T))/sum(generation,na.rm=T))*100,2),
+            "Importat de xarxa (%)"=round((-sum(fromgrid,na.rm=T)/
                   sum(consumption,na.rm=T))*100,2)
             )
-
 ```
 
