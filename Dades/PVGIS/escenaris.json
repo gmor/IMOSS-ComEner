@@ -9,7 +9,7 @@
     "MuntatgeFV": "building",
     "Perdues": 14,
     "InclinacioFV": 20,
-    "AzimutRespecteSud": 15
+    "AzimutRespecteSud": -70
   },
   {
     "NomCampFV": "Edifici plurifamiliar - Coberta plana",
@@ -21,7 +21,7 @@
     "MuntatgeFV": "free",
     "Perdues": 14,
     "InclinacioFV": 32,
-    "AzimutRespecteSud": -20
+    "AzimutRespecteSud": -70
   },
   {
     "NomCampFV": "Casa aïllada  - Coberta plana",

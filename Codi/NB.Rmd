@@ -12,7 +12,7 @@ Aquesta és la llibreta on s'integraran tots els apartats que anem treballant du
 
 **ATENCIÓ!** Tingueu en compte que podreu regenerar els resultats amb els fitxers de dades que vulgueu o necessiteu. Per tant, aquesta eina us podrà ser d'utilitat un cop comenceu a treballar. 
 
-```{r, echo=T, results=F, message=F, warning=F}
+```{r, echo=F, results=F, message=F, warning=F}
 library(ggplot2)
 library(data.table)
 library(lubridate)
@@ -70,7 +70,7 @@ if(!exists_demand_data) {
 }
 ```
 
-```{r, echo=T, results=F, message=F, warning=F}
+```{r, echo=F, results=F, message=F, warning=F}
 if(exists_demand_data) {
   
   # Llegim tots els fitxers de dades de Datadis
@@ -81,7 +81,7 @@ if(exists_demand_data) {
 }
 ```
 
-```{r, echo=T, results=F, message=F, warning=F}
+```{r, echo=F, results=F, message=F, warning=F}
 if(exists_demand_data) {
   
   # Llegim tots els fitxers de dades de E-Distribución
@@ -126,7 +126,7 @@ if(exists_demand_data) {
 ```
 </center>
 
-```{r, echo=T, results=F, warning=F, message=F}
+```{r, echo=F, results=F, warning=F, message=F}
 if(exists_demand_data) {
   df_NIF <- df %>% 
     group_by(time,CUPS) %>%
@@ -149,7 +149,7 @@ El potencial autoconsum col·lectiu que es pot fer en una comunitat energètica 
 
 Primerament, si tenim en compte l´últim any de dades disponibles per cadascún dels CUPS que integren la comunitat energètica, tenim la seguent corba de càrrega agregada:
 
-```{r, echo=T, results=F, warning=F, message=F}
+```{r, echo=F, results=F, warning=F, message=F}
 if(exists_demand_data) {
   df_ly <- df_NIF %>%
     group_by(ytime= format(time,"%m-%d %H:%M"), NIF) %>%
@@ -211,7 +211,7 @@ Com es pot veure, l'agregació anterior ens permet anar a un detall molt precís
 Tot i això, per entendre una mica més el de esón una mica complicats de dig
 
 
-```{r, echo=T, results=F, warning=F, message=F}
+```{r, echo=F, results=F, warning=F, message=F}
 if(exists_demand_data) {
   df_ly_season <- df_NIF %>%
     mutate(
@@ -278,7 +278,7 @@ if(exists_demand_data) {
 
 Una manera alternativa i que ens proporciona molta informació en un cop de vista al respecte de la demanda energètica agregada són els mapes de calor.
 
-```{r}
+```{r, echo=F}
 df_ly_total <- df_ly %>% 
   group_by(ytime) %>%
   summarise(
@@ -318,11 +318,62 @@ p
 ```
 </center>
 
+
+### Demanda agregada durant hores d'insolació
+
+Una altra visualització interessant de la corba de demanda elèctrica agregada és la visualització polar en base a la posició solar durant les hores en les que hi ha insolació. Aquest gràfic en serà molt útil per veure que les característiques de les instal·lacions fotovoltaiques que instal·larem són les adients considerant la tipologia d'usuaris que tenim.
+
+<center>
+```{r,echo=F,results=T, warning=F, message=F,out.width='100%'}
+sun_demand <- oce::sunAngle(with_tz(df_ly_total$ytime,"UTC"),longitude = 0.62,latitude = 41.65)
+polar_demand_df <- df_ly_total %>% 
+  mutate(azimuth=sun_demand$azimuth,altitude=sun_demand$altitude) %>% 
+           full_join(data.frame("ytime"=seq(min(.$ytime,na.rm=T),
+                                            max(.$ytime),by="min")),by="ytime") %>%
+           arrange(ytime) %>%
+           mutate(azimuth=na.approx(azimuth),
+                  altitude=na.approx(altitude),
+                  consumption=ifelse(altitude<=0,0,consumption),
+                  consumption=na.approx(consumption)) %>%
+           group_by(azimuth=round(azimuth,0),altitude=round(altitude,0)) %>%
+           summarise(
+             consumption = mean(consumption,na.rm=T)
+           ) %>% ungroup()
+g <- ggplot(polar_demand_df, aes(azimuth, altitude, z=consumption)) +
+  #geom_contour() +
+  geom_contour_filled(aes(fill = after_stat(level)),bins = 10) +
+  #scale_fill_distiller(name="Generació FV\nhoraria (kWh)", palette = "Spectral") +
+  ylim(c(90,0)) + xlim(c(0,359)) +
+  coord_polar() +
+  theme_minimal(base_size = 8) +
+  labs(fill="Demanda\nhoraria\ndels usuaris\n(kWh)") +
+  theme(legend.position = "left", plot.title=element_text(size = 8, margin=margin(0,0,0,0)),
+        axis.text.y=element_blank(), axis.text.x=element_blank(),
+        axis.title.x = element_blank(), axis.title.y = element_blank(),
+        strip.background = element_rect(colour="grey"),
+        axis.ticks=element_blank(), axis.text=element_blank(),
+        legend.title=element_text(size=5), legend.text=element_text(size=5),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0),
+        legend.key.size = unit(0.2, 'cm')) +
+  removeGrid()
+g <- g + 
+  geom_vline(aes(xintercept=0),alpha=0.4) +
+  geom_vline(aes(xintercept=90),alpha=0.4) +
+  geom_vline(aes(xintercept=180),alpha=0.4) +
+  geom_vline(aes(xintercept=270),alpha=0.4) +
+  geom_hline(aes(yintercept=0),alpha=0.2) +
+  geom_hline(aes(yintercept=30),alpha=0.2) +
+  geom_hline(aes(yintercept=60),alpha=0.2)
+print(g)
+```
+</center>
+
+
 ## 2. Generació fotovoltàica
 
 Segons els escenaris definits en els fitxers JSON (definit, per exemple a: Dades/PVGIS/escenaris.json), s'estima quina és la producció FotoVoltaica (FV) de cadascún dels camps definits. Cadascún d'ells anirà definit per un nom que ha de ser únic. A posteriori, el programa que genera la llibreta ja calcula quina és la generació agregada de tots els camps, és a dir, poden definir-se diferents tipologies de camps FV, amb canvis de posicions i/o característiques en cadascún d'ells.
 
-```{r}
+```{r, echo=F}
 if(length(pvgis_files)==0){
   generation_df <- NULL
   "No s'ha definit cap camp fotovoltaic! Genereu un fitxer JSON com a l'exemple"
@@ -342,7 +393,7 @@ if(!is.null(generation_df)) {
     aux <- generation_df %>% filter(NomCampFV==i)
     p <- dygraph(xts(x = data.frame(valor=aux$generation), 
                 order.by = aux$time), 
-            main=sprintf("NomCampFV: %s",i),
+            main=sprintf("Camp: %s",i),
             width = 800, height=350) %>%
       dyOptions(connectSeparatedPoints = T, fillGraph=T, fillAlpha=0.4, 
                 drawGrid = F, colors="#D8AE5A")  %>%
@@ -361,36 +412,56 @@ if(!is.null(generation_df)) {
 ```
 </center>
 
-```{r}
-ggplot(generation_df %>% filter(NomCampFV=="TotalFV" & altitude>0) %>% 
-         group_by(azimuth=round(azimuth,0),altitude=round(altitude,0),NomCampFV) %>%
-         summarise(
-           generation = mean(generation,na.rm=T)
-         ) %>% ungroup(), aes(azimuth, altitude, col=generation)) +
-  geom_line() +
-  scale_fill_distiller(palette = "Spectral", direction = -1) +
-  ylim(c(90,0)) + xlim(c(0,360)) +
-  coord_polar()
+Els anteriors resultats en forma de sèries temporals també els podem visualitzar com gràfics en coordenades polars, de forma similar com hem fet amb la demanda energètica en hores d'insolació. Aquests gràfics ens ajuden a comprendre i quantificar en un únic cop de vista els moments del dia en que tenim més producció fotovoltaica. 
 
-p <-p + scale_y_continuous(trans = "reverse", breaks = unique(df_ly_total$hour))
-p <-p + scale_x_continuous(breaks =c(1,10,20,31))
-p <-p + theme_minimal(base_size = 8)
-p <-p + labs(title= paste("Mapa de calor de la demanda agregada en any tipus"), x="Dia", y="Hora")
-p <-p + theme(legend.position = "bottom")+
-  theme(plot.title=element_text(size = 14))+
-  theme(axis.text.y=element_text(size=6)) +
-  theme(axis.text.x=element_text(size=6,angle=90)) +
-  theme(strip.background = element_rect(colour="white"))+
-  theme(plot.title=element_text(hjust=0))+
-  theme(axis.ticks=element_blank())+
-  theme(axis.text=element_text(size=7))+
-  theme(legend.title=element_text(size=8))+
-  theme(legend.text=element_text(size=6))+
-  removeGrid()
+```{r,echo=F,results=T, warning=F, message=F,out.width='100%'}
+polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
+  polar_df <- generation_df %>% filter(NomCampFV==i) %>% 
+           select(-NomCampFV) %>%
+           full_join(data.frame("time"=seq(min(.$time,na.rm=T),max(.$time),by="min")),by="time") %>%
+           arrange(time) %>%
+           mutate(azimuth=na.approx(azimuth),
+                  altitude=na.approx(altitude),
+                  generation=ifelse(altitude<=0,0,generation),
+                  generation=na.approx(generation)) %>%
+           group_by(azimuth=round(azimuth,0),altitude=round(altitude,0)) %>%
+           summarise(
+             generation = mean(generation,na.rm=T)
+           ) %>% ungroup()
+  g <- ggplot(polar_df, aes(azimuth, altitude, z=generation)) +
+    #geom_contour() +
+    geom_contour_filled(aes(fill = after_stat(level)),bins = 10) +
+    #scale_fill_distiller(name="Generació FV\nhoraria (kWh)", palette = "Spectral") +
+    ylim(c(90,0)) + xlim(c(0,359)) +
+    coord_polar() +
+    theme_minimal(base_size = 8) +
+    labs(title= sprintf("Camp: %s",i),fill="Generació FV\nhoraria (kWh)") +
+    theme(legend.position = "left", plot.title=element_text(size = 8, margin=margin(0,0,0,0)),
+          axis.text.y=element_blank(), axis.text.x=element_blank(),
+          axis.title.x = element_blank(), axis.title.y = element_blank(),
+          strip.background = element_rect(colour="grey"),
+          axis.ticks=element_blank(), axis.text=element_blank(),
+          legend.title=element_text(size=5), legend.text=element_text(size=5),
+          plot.margin = margin(t = 0, r = 0, b = 0, l = 0),
+          legend.key.size = unit(0.2, 'cm')) +
+    removeGrid()
+  g <- g + 
+    geom_vline(aes(xintercept=0),alpha=0.4) +
+    geom_vline(aes(xintercept=90),alpha=0.4) +
+    geom_vline(aes(xintercept=180),alpha=0.4) +
+    geom_vline(aes(xintercept=270),alpha=0.4) +
+    geom_hline(aes(yintercept=0),alpha=0.2) +
+    geom_hline(aes(yintercept=30),alpha=0.2) +
+    geom_hline(aes(yintercept=60),alpha=0.2)
+  return(g)
+  })
+do.call(gridExtra::grid.arrange,c(polar_plots,nrow=2,ncol=ceiling(length(polar_plots)/2)))
 ```
 
-
 # 3. Comprovació del nivell d'autoconsum
+
+Finalment, volem quantificar quin serà l'autoconsum i l'exportació d'energia FV esperada. Primer, respecte a tots els usuaris de la nostra comunitat. Després ho quantificarem per cada usuari donant com a exemple una repartició de coeficients d'exemple en base proporcional al consum energètic individual. 
+
 ```{r, echo=F, results=F}
 if(!is.null(generation_df)){
   df_ly_total_with_gen <- df_ly_total %>% 
@@ -408,7 +479,7 @@ if(!is.null(generation_df)){
 }
 ```
 
-```{r}
+```{r, echo=F}
 if(!is.null(generation_df)){
   p <- dygraph(
         xts(df_ly_total_with_gen %>% select(surplus, selfcons, fromgrid) %>%
@@ -441,4 +512,36 @@ if(!is.null(generation_df)){
 }
 ```
 
+### Generació dels coeficients de repartiment
+
+```{r}
+coefs_nif <- df_ly %>% group_by(NIF) %>% summarise(coef=mean(consumption))
+coefs_nif$coef <- coefs_nif$coef/sum(coefs_nif$coef)
+
+df_ly_with_gen <- df_ly %>% 
+    left_join(generation_df %>% filter(NomCampFV=="TotalFV") %>% select(-NomCampFV),by = c("ytime"="time")) %>%
+    left_join(coefs_nif,by="NIF")
+df_ly_with_gen$generation <- df_ly_with_gen$generation*df_ly_with_gen$coef
+
+df_ly_with_gen$surplus <-
+  ifelse(df_ly_with_gen$generation>df_ly_with_gen$consumption,
+         df_ly_with_gen$generation - df_ly_with_gen$consumption,0)
+df_ly_with_gen$selfcons <-  
+  ifelse(df_ly_with_gen$generation<=df_ly_with_gen$consumption, 
+         df_ly_with_gen$generation, df_ly_with_gen$consumption)
+df_ly_with_gen$selfconsperc <-
+  (df_ly_with_gen$selfcons/df_ly_with_gen$consumption) * 100
+df_ly_with_gen$fromgrid <- 
+  - df_ly_with_gen$consumption + df_ly_with_gen$selfcons
+round(sum(df_ly_with_gen$selfcons,na.rm=T)/
+                  sum(df_ly_with_gen$generation,na.rm=T),3)*100
+
+df_ly_with_gen %>% group_by(NIF) %>%
+  summarise(autoconsum=round((sum(selfcons,na.rm=T)/sum(generation,na.rm=T))*100,2),
+            excedent=round(((sum(generation,na.rm=T)-sum(selfcons,na.rm=T))/sum(generation,na.rm=T))*100,2),
+            xarxa=round((-sum(fromgrid,na.rm=T)/
+                  sum(consumption,na.rm=T))*100,2)
+            )
+
+```
 

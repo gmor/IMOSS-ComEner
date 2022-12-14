@@ -117,7 +117,7 @@ pvgis_get_hourly_data <- function (years=2019:2020, scenario) {
     do.call(rbind,lapply(content$outputs$hourly,function(i){unlist(i)})))
   timeseries <- data.frame(
     "time" = as.POSIXct(
-      timeseries$time, format = "%Y%m%d:%H%M", tz="UTC") - minutes(70),
+      timeseries$time, format = "%Y%m%d:%H%M", tz="UTC") - minutes(10),
     "generation" = as.numeric(timeseries$P)/1000)
   
   return(list("name"=nameField,"inputs"=content$inputs,"output"=timeseries))
