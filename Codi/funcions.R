@@ -120,14 +120,13 @@ pvgis_get_hourly_data <- function (years=2019:2020, scenario) {
       timeseries$time, format = "%Y%m%d:%H%M", tz="UTC") - minutes(10),
     "generation" = as.numeric(timeseries$P)/1000)
   
-  return(list("name"=nameField,"inputs"=content$inputs,"output"=timeseries))
+  return(list("name"=nameField,"inputs"=content$inputs,"output"=timeseries,"meta"=content$meta))
 }
 
 pvgis_download_scenarios <- function(scenarios){
-  
-  total_generation <- do.call(rbind,
-    lapply(scenarios,function(scenario){
-      pvgis_results <- pvgis_get_hourly_data(2020, scenario)$output
+  downloaded_scenarios <- lapply(scenarios,function(scenario){
+      pvgis_content <- pvgis_get_hourly_data(2020, scenario)
+      pvgis_results <- pvgis_content$output
       sun_position <- as.data.frame(do.call(cbind,
                                             oce::sunAngle(pvgis_results$time,scenario$Longitud,
                                                           scenario$Latitud,T)))[,c("time","azimuth","altitude")]
@@ -135,16 +134,20 @@ pvgis_download_scenarios <- function(scenarios){
                                       origin=as.POSIXct("1970-01-01 00:00:00",tz="UTC"),tz = "UTC")
       pvgis_results <- pvgis_results %>% left_join(sun_position, by="time")
       pvgis_results$NomCampFV <- scenario$NomCampFV
-      pvgis_results
+      pvgis_inputs <- setNames(list(pvgis_content$input),scenario$NomCampFV)
+      pvgis_meta <- setNames(list(pvgis_content$meta),scenario$NomCampFV)
+      return(list("df"=pvgis_results, "inputs"=pvgis_inputs, "meta"=pvgis_meta))
     }
-    ))
+  )
+  total_generation <- do.call(rbind,lapply(downloaded_scenarios,function(i)i$df))
   total_generation$time <- with_tz(total_generation$time,"Europe/Madrid")
   aggregated_generation <- total_generation %>% group_by(time) %>%
     summarise(generation = sum(generation,na.rm=T),
               azimuth = mean(azimuth,na.rm=T),
               altitude = mean(altitude,na.rm=T)) %>%
-    ungroup() %>% mutate(NomCampFV="TotalFV")
+    ungroup() %>% mutate(NomCampFV="Tots dels camps agregats")
   total_generation <- rbind(total_generation, aggregated_generation)
   
-  return(total_generation)
+  return(list("df"=total_generation, "inputs"=unlist(lapply(downloaded_scenarios,function(i)i$inputs),recursive = F), 
+              "meta"=unlist(lapply(downloaded_scenarios,function(i)i$meta),recursive = F)))
 }

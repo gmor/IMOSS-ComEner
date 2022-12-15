@@ -380,7 +380,8 @@ if(length(pvgis_files)==0){
 } else {
   pvgis_scenarios <- do.call(c,lapply(pvgis_files,
                                       function(x)fromJSON(x,simplifyDataFrame = F)))
-  generation_df <- pvgis_download_scenarios(pvgis_scenarios)
+  results_from_pvgis <- pvgis_download_scenarios(pvgis_scenarios)
+  generation_df <- results_from_pvgis$df
 }
 ```
 
@@ -420,6 +421,7 @@ Els anteriors resultats en forma de sèries temporals també els podem visualitz
 
 ```{r,echo=F,results=T, warning=F, message=F,out.width='100%'}
 polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
+  
   polar_df <- generation_df %>% filter(NomCampFV==i) %>% 
            select(-NomCampFV) %>%
            full_join(data.frame("time"=seq(min(.$time,na.rm=T),max(.$time),by="min")),by="time") %>%
@@ -432,6 +434,14 @@ polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
            summarise(
              generation = mean(generation,na.rm=T)
            ) %>% ungroup()
+  title_polar_plot <- sprintf(
+    "Camp: %s\nPotència: %skW,\nAzimut respecte sud: %sº, \nInclinació respecte l'horitzontal: %sº,\nGeneració FV anual: %skWh",
+    i, results_from_pvgis$inputs[[i]]$pv_module$peak_power, 
+    results_from_pvgis$inputs[[i]]$mounting_system$fixed$azimuth$value, 
+    results_from_pvgis$inputs[[i]]$mounting_system$fixed$slope$value,
+    round(mean((generation_df %>% filter(NomCampFV==i) %>% 
+            group_by("year"=year(time)) %>%
+            summarise(generation=ifelse(length(generation)>1000,sum(generation),NA)))$generation, na.rm=T),0))
   g <- ggplot(polar_df, aes(azimuth, altitude, z=generation)) +
     #geom_contour() +
     geom_contour_filled(aes(fill = after_stat(level)),bins = 10) +
@@ -439,15 +449,15 @@ polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
     ylim(c(90,0)) + xlim(c(0,359)) +
     coord_polar() +
     theme_minimal(base_size = 8) +
-    labs(title= sprintf("Camp: %s",i),fill="Generació FV\nhoraria (kWh)") +
-    theme(legend.position = "left", plot.title=element_text(size = 8, margin=margin(0,0,0,0)),
+    labs(title= title_polar_plot, fill="Generació FV\nhoraria (kWh)") +
+    theme(legend.position = "left", plot.title=element_text(size = 6, margin=margin(3,0,0,0)),
           axis.text.y=element_blank(), axis.text.x=element_blank(),
           axis.title.x = element_blank(), axis.title.y = element_blank(),
           strip.background = element_rect(colour="grey"),
           axis.ticks=element_blank(), axis.text=element_blank(),
           legend.title=element_text(size=5), legend.text=element_text(size=5),
           plot.margin = margin(t = 0, r = 0, b = 0, l = 0),
-          legend.key.size = unit(0.2, 'cm')) +
+          legend.key.size = unit(0.3, 'cm')) +
     removeGrid()
   g <- g + 
     geom_vline(aes(xintercept=0),alpha=0.4) +
@@ -469,7 +479,7 @@ Finalment, volem quantificar quin serà l'autoconsum i l'exportació d'energia F
 ```{r, echo=F, results=F}
 if(!is.null(generation_df)){
   df_ly_total_with_gen <- df_ly_total %>% 
-    left_join(generation_df %>% filter(NomCampFV=="TotalFV") %>% select(-NomCampFV),by = c("ytime"="time"))
+    left_join(generation_df %>% filter(NomCampFV=="Tots dels camps agregats") %>% select(-NomCampFV),by = c("ytime"="time"))
   df_ly_total_with_gen$surplus <-
     ifelse(df_ly_total_with_gen$generation>df_ly_total_with_gen$consumption,
            df_ly_total_with_gen$generation - df_ly_total_with_gen$consumption,0)
@@ -536,7 +546,7 @@ Seguidament sobre l'any d'exemple que hem estat treballant, podeu veure quins s�
 
 ```{r,echo=F}
 df_ly_with_gen <- df_ly %>% 
-    left_join(generation_df %>% filter(NomCampFV=="TotalFV") %>% select(-NomCampFV),by = c("ytime"="time")) %>%
+    left_join(generation_df %>% filter(NomCampFV=="Tots dels camps agregats") %>% select(-NomCampFV),by = c("ytime"="time")) %>%
     left_join(coefs_nif,by="NIF")
 df_ly_with_gen$generation <- df_ly_with_gen$generation*df_ly_with_gen$coef
 
