@@ -434,14 +434,18 @@ polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
            summarise(
              generation = mean(generation,na.rm=T)
            ) %>% ungroup()
-  title_polar_plot <- sprintf(
-    "Camp: %s\nPotència: %skW,\nAzimut respecte sud: %sº, \nInclinació respecte l'horitzontal: %sº,\nGeneració FV anual: %skWh",
-    i, results_from_pvgis$inputs[[i]]$pv_module$peak_power, 
-    results_from_pvgis$inputs[[i]]$mounting_system$fixed$azimuth$value, 
-    results_from_pvgis$inputs[[i]]$mounting_system$fixed$slope$value,
-    round(mean((generation_df %>% filter(NomCampFV==i) %>% 
+  anual_generation <- round(mean((generation_df %>% filter(NomCampFV==i) %>% 
             group_by("year"=year(time)) %>%
-            summarise(generation=ifelse(length(generation)>1000,sum(generation),NA)))$generation, na.rm=T),0))
+            summarise(generation=ifelse(length(generation)>1000,sum(generation),NA)))$generation, na.rm=T),0)
+  title_polar_plot <- if(i %in% names(results_from_pvgis$inputs)){
+    sprintf("Camp: %s\nPotència: %skW,\nAzimut respecte sud: %sº, \nInclinació respecte l'horitzontal: %sº,\nGeneració FV anual: %skWh",
+      i, results_from_pvgis$inputs[[i]]$pv_module$peak_power, 
+      results_from_pvgis$inputs[[i]]$mounting_system$fixed$azimuth$value, 
+      results_from_pvgis$inputs[[i]]$mounting_system$fixed$slope$value,
+      anual_generation)
+  } else {
+    sprintf("Tots els camps\nGeneració FV anual: %skWh",anual_generation)
+  }
   g <- ggplot(polar_df, aes(azimuth, altitude, z=generation)) +
     #geom_contour() +
     geom_contour_filled(aes(fill = after_stat(level)),bins = 10) +
