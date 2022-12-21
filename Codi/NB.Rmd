@@ -128,14 +128,13 @@ if(exists_demand_data) {
 
 ```{r, echo=F, results=F, warning=F, message=F}
 if(exists_demand_data) {
-  df_NIF <- df %>% 
+  df_CUPS <- df %>% 
     group_by(time,CUPS) %>%
     summarise(
       consumption=sum(consumption),
-      NIF=first(NIF)
+      CUPS=first(CUPS)
     ) %>%
-    ungroup() %>%
-    select(-CUPS)
+    ungroup()
 }
 ```
 
@@ -151,8 +150,8 @@ Primerament, si tenim en compte l´últim any de dades disponibles per cadascún
 
 ```{r, echo=F, results=F, warning=F, message=F}
 if(exists_demand_data) {
-  df_ly <- df_NIF %>%
-    group_by(ytime= format(time,"%m-%d %H:%M"), NIF) %>%
+  df_ly <- df_CUPS %>%
+    group_by(ytime= format(time,"%m-%d %H:%M"), CUPS) %>%
     summarise(
       consumption=mean(consumption,na.rm=T)
     ) %>%
@@ -177,11 +176,11 @@ if(exists_demand_data) {
   # )
   df_ly_cast <- pivot_wider(
     data = df_ly, 
-    names_from = "NIF", 
+    names_from = "CUPS", 
     values_from = "consumption",values_fn = mean)
   p <- dygraph(
       xts(df_ly_cast %>% select(-ytime), order.by = df_ly_cast$ytime),
-      main = "Corbes de càrrega agregades per NIF durant un any natural",
+      main = "Corbes de càrrega agregades per CUPS durant un any natural",
       width = 900,
       height = 500
     ) %>%
@@ -213,7 +212,7 @@ Tot i això, per entendre una mica més el de esón una mica complicats de dig
 
 ```{r, echo=F, results=F, warning=F, message=F}
 if(exists_demand_data) {
-  df_ly_season <- df_NIF %>%
+  df_ly_season <- df_CUPS %>%
     mutate(
       yday = as.numeric(format(time,"%j")),
       season = ifelse(yday<79 | yday>=355, "Hivern",
@@ -223,7 +222,7 @@ if(exists_demand_data) {
       month = month(time)
     ) %>%
     group_by(hour = sprintf("%02i:%02i",hour(time),minute(time)), 
-             season, NIF) %>%
+             season, CUPS) %>%
     summarise(
       # date = as.Date(paste0(format(time,"%Y-%m"),"-01")),
       date = ifelse(season=="Hivern",as.Date("2021-02-01"),
@@ -244,13 +243,13 @@ if(exists_demand_data) {
 if(exists_demand_data) {
   df_ly_cast_season <- as.data.frame(
     pivot_wider(df_ly_season, 
-      names_from = "NIF", 
+      names_from = "CUPS", 
       values_from = "consumption",values_fn = mean))
   pts <- lapply(unique(df_ly_cast_season$season), function(ws){
     aux <- df_ly_cast_season %>% filter(season==ws)
     p <- dygraph(
         xts(aux %>% select(-time,-season), order.by = aux$time),
-        main = sprintf("%s - Corbes de càrrega mitjes agregades per NIF",ws),
+        main = sprintf("%s - Corbes de càrrega mitjes agregades per CUPS",ws),
         width = 900,
         height = 500
       ) %>%
@@ -328,17 +327,24 @@ Una altra visualització interessant de la corba de demanda elèctrica agregada 
 sun_demand <- oce::sunAngle(with_tz(df_ly_total$ytime,"UTC"),longitude = 0.62,latitude = 41.65)
 polar_demand_df <- df_ly_total %>% 
   mutate(azimuth=sun_demand$azimuth,altitude=sun_demand$altitude) %>% 
-           full_join(data.frame("ytime"=seq(min(.$ytime,na.rm=T),
-                                            max(.$ytime),by="min")),by="ytime") %>%
-           arrange(ytime) %>%
-           mutate(azimuth=na.approx(azimuth),
-                  altitude=na.approx(altitude),
-                  consumption=ifelse(altitude<=0,0,consumption),
-                  consumption=na.approx(consumption)) %>%
-           group_by(azimuth=round(azimuth,0),altitude=round(altitude,0)) %>%
-           summarise(
-             consumption = mean(consumption,na.rm=T)
-           ) %>% ungroup()
+  full_join(data.frame("ytime"=seq(min(.$ytime,na.rm=T),
+                                  max(.$ytime),by="min")),by="ytime") %>%
+  arrange(ytime) %>%
+  mutate(azimuth=na.approx(azimuth),
+        altitude=na.approx(altitude),
+        consumption=ifelse(altitude<=0,0,consumption),
+        consumption=na.approx(consumption)) %>%
+  group_by(azimuth=round(azimuth,0),altitude=round(altitude,0)) %>%
+  summarise(
+   consumption = mean(consumption,na.rm=T)
+  ) %>% ungroup()
+
+max_consumption_azimuth_df <- polar_demand_df %>% 
+  group_by(azimuth) %>%
+  summarise(consumption = sum(consumption)) %>% ungroup()
+max_consumption_azimuth <- round(weighted.mean(
+   max_consumption_azimuth_df$azimuth,max_consumption_azimuth_df$consumption,na.rm = T),0)
+
 g <- ggplot(polar_demand_df, aes(azimuth, altitude, z=consumption)) +
   #geom_contour() +
   geom_contour_filled(aes(fill = after_stat(level)),bins = 10) +
@@ -346,17 +352,18 @@ g <- ggplot(polar_demand_df, aes(azimuth, altitude, z=consumption)) +
   ylim(c(90,0)) + xlim(c(0,359)) +
   coord_polar() +
   theme_minimal(base_size = 8) +
-  labs(fill="Demanda\nhoraria\ndels usuaris\n(kWh)") +
-  theme(legend.position = "left", plot.title=element_text(size = 8, margin=margin(0,0,0,0)),
+  labs(title="Demanda horaria de tots els CUPS",fill="Demanda\nhoraria\n(kWh)") +
+  theme(legend.position = "left", plot.title=element_text(size = 14, margin=margin(0,-10,0,0)),
         axis.text.y=element_blank(), axis.text.x=element_blank(),
         axis.title.x = element_blank(), axis.title.y = element_blank(),
         strip.background = element_rect(colour="grey"),
         axis.ticks=element_blank(), axis.text=element_blank(),
-        legend.title=element_text(size=5), legend.text=element_text(size=5),
+        legend.title=element_text(size=8), legend.text=element_text(size=8),
         plot.margin = margin(t = 0, r = 0, b = 0, l = 0),
         legend.key.size = unit(0.2, 'cm')) +
   removeGrid()
 g <- g + 
+  geom_vline(aes(xintercept=max_consumption_azimuth), alpha=0.8, cex=1.4) +
   geom_vline(aes(xintercept=0),alpha=0.4) +
   geom_vline(aes(xintercept=90),alpha=0.4) +
   geom_vline(aes(xintercept=180),alpha=0.4) +
@@ -364,6 +371,9 @@ g <- g +
   geom_hline(aes(yintercept=0),alpha=0.2) +
   geom_hline(aes(yintercept=30),alpha=0.2) +
   geom_hline(aes(yintercept=60),alpha=0.2)
+g <- g +
+  annotate("label",x=max_consumption_azimuth,y=90,label=
+                   sprintf("Opt.azimuth:\n%sº",-180+max_consumption_azimuth),size=3)
 print(g)
 ```
 </center>
@@ -437,6 +447,11 @@ polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
   anual_generation <- round(mean((generation_df %>% filter(NomCampFV==i) %>% 
             group_by("year"=year(time)) %>%
             summarise(generation=ifelse(length(generation)>1000,sum(generation),NA)))$generation, na.rm=T),0)
+  max_generation_azimuth_df <- polar_df %>% 
+    group_by(azimuth) %>%
+    summarise(generation = sum(generation)) %>% ungroup()
+  max_generation_azimuth <- round(weighted.mean(
+     max_generation_azimuth_df$azimuth,max_generation_azimuth_df$generation,na.rm = T),0)
   title_polar_plot <- if(i %in% names(results_from_pvgis$inputs)){
     sprintf("Camp: %s\nPotència: %skW,\nAzimut respecte sud: %sº, \nInclinació respecte l'horitzontal: %sº,\nGeneració FV anual: %skWh",
       i, results_from_pvgis$inputs[[i]]$pv_module$peak_power, 
@@ -464,6 +479,7 @@ polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
           legend.key.size = unit(0.3, 'cm')) +
     removeGrid()
   g <- g + 
+    geom_vline(aes(xintercept=max_generation_azimuth), alpha=0.8, cex=1.4) +
     geom_vline(aes(xintercept=0),alpha=0.4) +
     geom_vline(aes(xintercept=90),alpha=0.4) +
     geom_vline(aes(xintercept=180),alpha=0.4) +
@@ -471,6 +487,9 @@ polar_plots <- lapply(unique(generation_df$NomCampFV),function(i){
     geom_hline(aes(yintercept=0),alpha=0.2) +
     geom_hline(aes(yintercept=30),alpha=0.2) +
     geom_hline(aes(yintercept=60),alpha=0.2)
+  g <- g + 
+    annotate("label",x=max_consumption_azimuth,y=90,label=
+                     sprintf("Opt.azimuth:%sº",-180+max_generation_azimuth),size=2,alpha=0.8)
   return(g)
   })
 do.call(gridExtra::grid.arrange,c(polar_plots,nrow=2,ncol=ceiling(length(polar_plots)/2)))
@@ -530,28 +549,37 @@ if(!is.null(generation_df)){
 }
 ```
 
-### Generació dels coeficients de repartiment i resultats individual
+### Generació dels coeficients de repartiment estàtic i resultats individuals
+
+```{r}
+dir.create(paste0(wd,"/../Resultats"),showWarnings = F)
+dir.create(paste0(wd,"/../Resultats/Coeficients de repartiment"),showWarnings = F)
+dir.create(paste0(wd,"/../Resultats/Resultats de resum"),showWarnings = F)
+```
 
 Si apliquem un repartiment de coeficients en base al consum anual que té cada usuari, els repartiments fixos serien:
 
 ```{r,echo=F}
-coefs_nif <- df_ly %>% group_by(NIF) %>% summarise(coef=mean(consumption))
-coefs_nif$coef <- round(coefs_nif$coef/sum(coefs_nif$coef), 2)
-coefs_nif
+coefs_CUPS <- df_ly %>% group_by(CUPS) %>% summarise(coef=mean(consumption))
+coefs_CUPS$coef <- round(coefs_CUPS$coef/sum(coefs_CUPS$coef), 2)
+coefs_CUPS
 ```
 
-Aquest seria el fitxer en format *txt* a enviar a la distribuïdora.
+Aquest seria el fitxer en format *txt* a enviar a la distribuïdora. Recordeu que també teniu el fitxer a *Resultats/Coeficients de repartiment/Estàtics.txt*
 
 ```{r,echo=F}
-write.table(coefs_nif,file = stdout(),quote=F,col.names = F,row.names = F,sep=";",dec=",")
+write.table(coefs_CUPS,file = stdout(),quote=F,col.names = F,row.names = F,sep=";",dec=",")
+write.table(coefs_CUPS,
+            file = paste0(wd,"/../Resultats/Coeficients de repartiment/Estàtics.txt"),
+            quote=F,col.names = F,row.names = F,sep=";",dec=",")
 ```
 
-Seguidament sobre l'any d'exemple que hem estat treballant, podeu veure quins són els resultats percentuals d'autoconsum, excedents i importació d'energia de xarxa respecte el consum individual i l'energia generada que pertoca a cada usuari segons els coeficients.
+Seguidament sobre l'any d'exemple que hem estat treballant, podeu veure quins són els resultats percentuals d'autoconsum, excedents i importació d'energia de xarxa respecte el consum individual i l'energia generada que pertoca a cada usuari segons els coeficients estàtics.
 
 ```{r,echo=F}
 df_ly_with_gen <- df_ly %>% 
     left_join(generation_df %>% filter(NomCampFV=="Tots dels camps agregats") %>% select(-NomCampFV),by = c("ytime"="time")) %>%
-    left_join(coefs_nif,by="NIF")
+    left_join(coefs_CUPS,by="CUPS")
 df_ly_with_gen$generation <- df_ly_with_gen$generation*df_ly_with_gen$coef
 
 df_ly_with_gen$surplus <-
@@ -565,11 +593,76 @@ df_ly_with_gen$selfconsperc <-
 df_ly_with_gen$fromgrid <- 
   - df_ly_with_gen$consumption + df_ly_with_gen$selfcons
 
-df_ly_with_gen %>% group_by(NIF) %>%
+df_ly_with_gen_summary <- df_ly_with_gen %>% group_by(CUPS) %>%
   summarise("Autoconsum (%)"=round((sum(selfcons,na.rm=T)/sum(generation,na.rm=T))*100,2),
             "Excedent (%)"=round(((sum(generation,na.rm=T)-sum(selfcons,na.rm=T))/sum(generation,na.rm=T))*100,2),
             "Importat de xarxa (%)"=round((-sum(fromgrid,na.rm=T)/
                   sum(consumption,na.rm=T))*100,2)
             )
+df_ly_with_gen_summary
+write.table(df_ly_with_gen_summary,
+            paste0(wd,"/../Resultats/Resultats de resum/Estàtics.csv"),
+            quote=F, row.names = F, col.names = T, sep=";")
 ```
 
+### Generació dels coeficients de repartiment dinàmics i resultats individuals
+
+Si apliquem un repartiment de coeficients en base al consum horari d'un any de referència per cada CUPS, els repartiments dinàmics serien:
+
+```{r,echo=F}
+coefs_CUPS <- df_ly %>% 
+  left_join(
+    df_ly %>% group_by(ytime) %>% 
+      summarise(consumption_by_time=sum(consumption)) %>%
+      ungroup(),
+    by="ytime"
+  ) %>%
+  mutate(
+    coef = round(ifelse(consumption_by_time>0,
+                    consumption/consumption_by_time,0),2),
+    hour = (as.numeric(df_ly$ytime - min(df_ly$ytime,na.rm=T))/3600) + 1
+  ) %>%
+  select(CUPS,hour,coef)
+coefs_CUPS
+```
+
+Aquest seria un petit extracte del fitxer en format *txt* a enviar a la distribuïdora. En el fitxer *Resultats/Coeficients de repartiment/Dinàmics.txt* podeu veure el fitxer d'exemple que s'enviaria.
+
+```{r,echo=F}
+write.table(coefs_CUPS[1:36,],file = stdout(),quote=F,col.names = F,row.names = F,sep=";",dec=",")
+write.table(coefs_CUPS,
+            file = paste0(wd,"/../Resultats/Coeficients de repartiment/Dinàmics.txt"),
+            quote=F,col.names = F,row.names = F,sep=";",dec=",")
+```
+
+Seguidament podeu veure quins són els resultats percentuals d'autoconsum, excedents i importació d'energia de xarxa respecte el consum individual i l'energia generada que pertoca a cada usuari segons els coeficients dinàmics.
+
+```{r,echo=F}
+df_ly_with_gen <- df_ly %>% 
+  left_join(generation_df %>% filter(NomCampFV=="Tots dels camps agregats") %>% select(-NomCampFV),by = c("ytime"="time")) %>%
+  mutate(hour = (as.numeric(df_ly$ytime - min(df_ly$ytime,na.rm=T))/3600) + 1) %>%
+  left_join(coefs_CUPS,by=c("CUPS","hour"))
+df_ly_with_gen$generation <- df_ly_with_gen$generation*df_ly_with_gen$coef
+
+df_ly_with_gen$surplus <-
+  ifelse(df_ly_with_gen$generation>df_ly_with_gen$consumption,
+         df_ly_with_gen$generation - df_ly_with_gen$consumption,0)
+df_ly_with_gen$selfcons <-  
+  ifelse(df_ly_with_gen$generation<=df_ly_with_gen$consumption, 
+         df_ly_with_gen$generation, df_ly_with_gen$consumption)
+df_ly_with_gen$selfconsperc <-
+  (df_ly_with_gen$selfcons/df_ly_with_gen$consumption) * 100
+df_ly_with_gen$fromgrid <- 
+  - df_ly_with_gen$consumption + df_ly_with_gen$selfcons
+
+df_ly_with_gen_summary <- df_ly_with_gen %>% group_by(CUPS) %>%
+  summarise("Autoconsum (%)"=round((sum(selfcons,na.rm=T)/sum(generation,na.rm=T))*100,2),
+            "Excedent (%)"=round(((sum(generation,na.rm=T)-sum(selfcons,na.rm=T))/sum(generation,na.rm=T))*100,2),
+            "Importat de xarxa (%)"=round((-sum(fromgrid,na.rm=T)/
+                  sum(consumption,na.rm=T))*100,2)
+            )
+df_ly_with_gen_summary
+write.table(df_ly_with_gen_summary,
+            paste0(wd,"/../Resultats/Resultats de resum/Dinàmics.csv"),
+            quote=F, row.names = F, col.names = T, sep=";")
+```
