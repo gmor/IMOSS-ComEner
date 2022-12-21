@@ -82,7 +82,7 @@ if(exists_demand_data) {
 ```
 
 ```{r, echo=F, results=F, message=F, warning=F}
-if(exists_demand_data) {
+if(length(edistribucion_files)>0) {
   
   # Llegim tots els fitxers de dades de E-Distribución
   df_edist <- read_edistribucion_files(edistribucion_files,only_real_values = F)
@@ -551,7 +551,7 @@ if(!is.null(generation_df)){
 
 ### Generació dels coeficients de repartiment estàtic i resultats individuals
 
-```{r}
+```{r,echo=F}
 dir.create(paste0(wd,"/../Resultats"),showWarnings = F)
 dir.create(paste0(wd,"/../Resultats/Coeficients de repartiment"),showWarnings = F)
 dir.create(paste0(wd,"/../Resultats/Resultats de resum"),showWarnings = F)
@@ -560,7 +560,9 @@ dir.create(paste0(wd,"/../Resultats/Resultats de resum"),showWarnings = F)
 Si apliquem un repartiment de coeficients en base al consum anual que té cada usuari, els repartiments fixos serien:
 
 ```{r,echo=F}
-coefs_CUPS <- df_ly %>% group_by(CUPS) %>% summarise(coef=mean(consumption))
+coefs_CUPS <- df_ly %>% 
+  group_by(CUPS) %>% 
+  summarise(coef=mean(consumption))
 coefs_CUPS$coef <- round(coefs_CUPS$coef/sum(coefs_CUPS$coef), 2)
 coefs_CUPS
 ```
@@ -603,6 +605,9 @@ df_ly_with_gen_summary
 write.table(df_ly_with_gen_summary,
             paste0(wd,"/../Resultats/Resultats de resum/Estàtics.csv"),
             quote=F, row.names = F, col.names = T, sep=";")
+write.table(df_ly_with_gen,
+            paste0(wd,"/../Resultats/Resultats de resum/Dades horaries - coeficients estàtics.csv"),
+            quote=F, row.names = F, col.names = T, sep=";",dec=",")
 ```
 
 ### Generació dels coeficients de repartiment dinàmics i resultats individuals
@@ -655,14 +660,25 @@ df_ly_with_gen$selfconsperc <-
 df_ly_with_gen$fromgrid <- 
   - df_ly_with_gen$consumption + df_ly_with_gen$selfcons
 
-df_ly_with_gen_summary <- df_ly_with_gen %>% group_by(CUPS) %>%
-  summarise("Autoconsum (%)"=round((sum(selfcons,na.rm=T)/sum(generation,na.rm=T))*100,2),
-            "Excedent (%)"=round(((sum(generation,na.rm=T)-sum(selfcons,na.rm=T))/sum(generation,na.rm=T))*100,2),
-            "Importat de xarxa (%)"=round((-sum(fromgrid,na.rm=T)/
+df_ly_with_gen_summary <- df_ly_with_gen %>% 
+  group_by(CUPS) %>%
+  summarise(
+    "Demanda anual (kWh)" = round(sum(consumption,na.rm=T),2),
+    "Generació anual (kWh)" = round(sum(generation,na.rm=T),2),
+    "Autoconsum (%)"=
+      round((sum(selfcons,na.rm=T)/sum(generation,na.rm=T))*100,2),
+    "Excedent (%)"=
+      round(((sum(generation,na.rm=T)-sum(selfcons,na.rm=T))/
+               sum(generation,na.rm=T))*100,2),
+    "Importat de xarxa (%)"=round((-sum(fromgrid,na.rm=T)/
                   sum(consumption,na.rm=T))*100,2)
-            )
+    )
 df_ly_with_gen_summary
 write.table(df_ly_with_gen_summary,
             paste0(wd,"/../Resultats/Resultats de resum/Dinàmics.csv"),
             quote=F, row.names = F, col.names = T, sep=";")
+write.table(df_ly_with_gen,
+            paste0(wd,"/../Resultats/Resultats de resum/Dades horaries - coeficients dinàmics.csv"),
+            quote=F, row.names = F, col.names = T, sep=";",dec=",")
+
 ```
