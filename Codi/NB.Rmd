@@ -86,12 +86,15 @@ if(exists_demand_data) {
   
   # Llegim tots els fitxers de dades de E-Distribución
   df_edist <- read_edistribucion_files(edistribucion_files,only_real_values = F)
-  df_edist <- df_edist %>% 
-    filter(is.finite(time) &
-           !duplicated(df_edist[,c("time","NIF","CUPS")]))
-  df <- rbind(df, df_edist)
+  if(!is.null(df_edist)){
+    df_edist <- df_edist %>% 
+      filter(is.finite(time) &
+             !duplicated(df_edist[,c("time","NIF","CUPS")]))
+    df <- rbind(df, df_edist)
+  }
 }
 ```
+
 
 <center>
 ```{r, echo=F, results=T, message=F, warning=F, out.width="100%"}
